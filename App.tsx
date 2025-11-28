@@ -3,7 +3,7 @@ import { supabase, isSupabaseConfigured, base64ToBlob } from './services/supabas
 import { generateLandingPage, generateReviews, generateActionImages, translateLandingPage } from './services/geminiService';
 import LandingPage, { ThankYouPage } from './components/LandingPage';
 import { ProductDetails, GeneratedContent, PageTone, UserSession, LandingPageRow, TemplateId, FormFieldConfig, TypographyConfig, UiTranslation, SiteConfig, Testimonial } from './types';
-import { Loader2, LogOut, Sparkles, ChevronLeft, ChevronRight, Save, ShoppingBag, ArrowRight, Trash2, Eye, UserPlus, LogIn, LayoutDashboard, Check, Image as ImageIcon, X, MonitorPlay, RefreshCcw, ArrowLeft, Settings, CreditCard, Link as LinkIcon, ListChecks, Pencil, Smartphone, Tablet, Monitor, Plus, MessageSquare, Images, Upload, Type, Truck, Flame, Zap, Globe, Banknote, MousePointerClick, Palette, Users, Copy, Target, MessageCircle, Code, Mail, Lock, Map, User, ArrowUp, ArrowDown, Package, ShieldCheck } from 'lucide-react';
+import { Loader2, LogOut, Sparkles, ChevronLeft, ChevronRight, Save, ShoppingBag, ArrowRight, Trash2, Eye, UserPlus, LogIn, LayoutDashboard, Check, Image as ImageIcon, X, MonitorPlay, RefreshCcw, ArrowLeft, Settings, CreditCard, Link as LinkIcon, ListChecks, Pencil, Smartphone, Tablet, Monitor, Plus, MessageSquare, Images, Upload, Type, Truck, Flame, Zap, Globe, Banknote, MousePointerClick, Palette, Users, Copy, Target, MessageCircle, Code, Mail, Lock, Map, User, ArrowUp, ArrowDown, Package, ShieldCheck, FileText as FileTextIcon } from 'lucide-react';
 
 // Declare Leaflet global
 declare global {
@@ -162,12 +162,47 @@ const PageCard = React.memo(({ page, onView, onEdit, onDuplicate, onDelete }: {
     );
 });
 
+// Helper function to create a default thank you page content object
+const createDefaultThankYouContent = (landingContent: GeneratedContent): GeneratedContent => {
+    return {
+        templateId: landingContent.templateId,
+        language: landingContent.language,
+        currency: landingContent.currency,
+        uiTranslation: landingContent.uiTranslation,
+        typography: landingContent.typography,
+        backgroundColor: '#f8fafc',
+        headline: landingContent.uiTranslation?.thankYouTitle || 'Grazie {name}!',
+        subheadline: landingContent.uiTranslation?.thankYouMsg || 'Il tuo ordine è stato ricevuto. Ti contatteremo al numero {phone} per confermare.',
+        heroImageBase64: undefined,
+        // Empty the rest of the fields that don't apply
+        heroImagePrompt: '',
+        generatedImages: [],
+        announcementBarText: '',
+        benefits: [],
+        features: [],
+        testimonials: [],
+        ctaText: '',
+        ctaSubtext: '',
+        colorScheme: 'blue',
+        niche: landingContent.niche,
+        // Reset non-applicable fields
+        price: '',
+        originalPrice: '',
+        showDiscount: false,
+        shippingCost: '',
+        enableShippingCost: false,
+        stockConfig: { enabled: false, quantity: 0 },
+        socialProofConfig: { enabled: false, intervalSeconds: 0, maxShows: 0 },
+        formConfiguration: [],
+    };
+};
+
 const App: React.FC = () => {
   const [view, setView] = useState<'home' | 'product_view' | 'thank_you_view' | 'admin' | 'preview'>('home');
   const [adminSection, setAdminSection] = useState<'pages' | 'settings'>('pages');
   const [publicPages, setPublicPages] = useState<LandingPageRow[]>([]);
-  const [selectedPublicPage, setSelectedPublicPage] = useState<GeneratedContent | null>(null);
-  const [currentThankYouSlug, setCurrentThankYouSlug] = useState<string | undefined>(undefined);
+  const [selectedPublicPage, setSelectedPublicPage] = useState<LandingPageRow | null>(null);
+  
   const [session, setSession] = useState<UserSession | null>(null);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false); 
@@ -192,13 +227,17 @@ const App: React.FC = () => {
 
   const [reviewCount, setReviewCount] = useState<number>(10);
   const [generatedContent, setGeneratedContent] = useState<GeneratedContent | null>(null);
+  const [generatedThankYouContent, setGeneratedThankYouContent] = useState<GeneratedContent | null>(null);
   const [editingPageId, setEditingPageId] = useState<string | null>(null); 
+  const [editingMode, setEditingMode] = useState<'landing' | 'thankyou'>('landing');
+
   const [isGenerating, setIsGenerating] = useState(false);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [isGeneratingReviews, setIsGeneratingReviews] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
+  const tyImageInputRef = useRef<HTMLInputElement>(null);
   const boxImageInputRef = useRef<HTMLInputElement>(null);
   const reviewImageInputRef = useRef<{ id: number, input: HTMLInputElement | null }>({ id: -1, input: null });
   const [previewDevice, setPreviewDevice] = useState<'mobile' | 'tablet' | 'desktop'>('desktop');
@@ -302,18 +341,10 @@ const App: React.FC = () => {
                 const { data: matchedPage, error } = await query;
                 
                 if (!error && matchedPage) {
-                    const contentWithScripts = { 
-                        ...matchedPage.content, 
-                        customHeadHtml: matchedPage.custom_head_html || matchedPage.content.customHeadHtml, 
-                        customThankYouHtml: matchedPage.custom_thankyou_html || matchedPage.content.customThankYouHtml 
-                    };
-
+                    setSelectedPublicPage(matchedPage);
                     if (matchedPage.slug === pageSlug || matchedPage.id === pageId) {
-                        setSelectedPublicPage(contentWithScripts);
-                        setCurrentThankYouSlug(matchedPage.thank_you_slug);
                         setView('product_view');
                     } else { // Matched thank_you_slug
-                        setSelectedPublicPage(contentWithScripts);
                         setView('thank_you_view');
                     }
                 } else {
@@ -351,7 +382,7 @@ const App: React.FC = () => {
     const params = new URLSearchParams(window.location.search);
     if(!params.get('p') && !params.get('s')) setIsLoadingPages(true);
     const { data, error } = await supabase.from('landing_pages').select('*').eq('is_published', true).order('created_at', { ascending: false }).limit(20); 
-    if (!error && data) { const transformedData = data.map((page: any) => ({ ...page, content: { ...page.content, customHeadHtml: page.custom_head_html || page.content.customHeadHtml, customThankYouHtml: page.custom_thankyou_html || page.content.customThankYouHtml } })); setPublicPages(transformedData as LandingPageRow[]); }
+    if (!error && data) { setPublicPages(data as LandingPageRow[]); }
     setIsLoadingPages(false);
   };
 
@@ -366,12 +397,16 @@ const App: React.FC = () => {
   const handleLogout = async () => { if (isSupabaseConfigured() && supabase) await supabase.auth.signOut(); setSession(null); setView('home'); };
   const handleStealthClick = () => { const now = Date.now(); if (now - lastClickTime < 1000) { const newCount = stealthCount + 1; setStealthCount(newCount); if (newCount >= 3) { setIsLoginOpen(true); setStealthCount(0); } } else { setStealthCount(1); } setLastClickTime(now); };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, forThankYouPage: boolean = false) => {
     const files = e.target.files;
     if (files && files.length > 0) {
       const newImages: string[] = []; const fileList = Array.from(files) as File[];
       for (const file of fileList) { if (file.size > 4 * 1024 * 1024) { alert(`Immagine ${file.name} troppo grande (max 4MB). Saltata.`); continue; } await new Promise<void>((resolve) => { const reader = new FileReader(); reader.onloadend = () => { if (reader.result) newImages.push(reader.result as string); resolve(); }; reader.readAsDataURL(file); }); }
-      setProduct(prev => ({ ...prev, images: [...(prev.images || []), ...newImages], image: (prev.images || []).length === 0 && newImages.length > 0 ? newImages[0] : prev.image }));
+      if (forThankYouPage) {
+        setGeneratedThankYouContent(prev => prev ? {...prev, heroImageBase64: newImages[0]} : null);
+      } else {
+        setProduct(prev => ({ ...prev, images: [...(prev.images || []), ...newImages], image: (prev.images || []).length === 0 && newImages.length > 0 ? newImages[0] : prev.image }));
+      }
     }
   };
 
@@ -432,6 +467,7 @@ const App: React.FC = () => {
       const initialGallery = [...(product.images || [])];
       let resultWithTemplate: GeneratedContent = { ...result, testimonials, templateId: selectedTemplate, heroImageBase64: initialGallery.length > 0 ? initialGallery[0] : undefined, generatedImages: initialGallery };
       setGeneratedContent(resultWithTemplate);
+      setGeneratedThankYouContent(createDefaultThankYouContent(resultWithTemplate));
       const lang = result.language || 'Italiano'; setTySlug(formatSlug(product.name) + getThankYouSuffix(lang));
       if (product.images && product.images.length > 0) { setIsGeneratingImage(true); const styles: string[] = []; if (genTechImages) styles.push('technical'); if (genBeforeAfter) styles.push('before_after'); if (genHumanUse) styles.push('human_use'); generateActionImages(product, imageGenerationCount, styles, customImagePrompt).then(generatedImages => { if (generatedImages && generatedImages.length > 0) { setGeneratedContent(prev => { if (!prev) return null; const newGallery = [...generatedImages, ...(prev.generatedImages || [])]; return { ...prev, heroImageBase64: generatedImages[0], generatedImages: newGallery }; }); } setIsGeneratingImage(false); }).catch(err => { console.error("Background image gen failed", err); setIsGeneratingImage(false); }); }
     } catch (error) { console.error(error); alert("Errore generazione. Controlla la console o l'API KEY."); } finally { setIsGenerating(false); }
@@ -458,7 +494,14 @@ const App: React.FC = () => {
         setIsDuplicating(true); 
         try { 
             const translatedContent = await translateLandingPage(duplicationTarget.content, duplicationLang); 
-            setGeneratedContent(translatedContent); 
+            setGeneratedContent(translatedContent);
+            // Also translate thank you page if it exists
+            if (duplicationTarget.thank_you_content) {
+                const translatedTYContent = await translateLandingPage(duplicationTarget.thank_you_content, duplicationLang);
+                setGeneratedThankYouContent(translatedTYContent);
+            } else {
+                setGeneratedThankYouContent(createDefaultThankYouContent(translatedContent));
+            }
             setProduct({ 
                 name: duplicationName, 
                 niche: duplicationTarget.niche, 
@@ -487,6 +530,7 @@ const App: React.FC = () => {
         // Simple Copy
         const newContent = { ...duplicationTarget.content };
         setGeneratedContent(newContent);
+        setGeneratedThankYouContent(duplicationTarget.thank_you_content ? { ...duplicationTarget.thank_you_content } : createDefaultThankYouContent(newContent));
         setProduct({
             name: duplicationName,
             niche: duplicationTarget.niche,
@@ -511,8 +555,11 @@ const App: React.FC = () => {
   const handleEditPage = (page: LandingPageRow) => {
       setEditingPageId(page.id); setSlug(page.slug || formatSlug(page.product_name)); setTySlug(page.thank_you_slug || (page.slug + getThankYouSuffix(page.content.language || 'Italiano')));
       let testimonials = page.content.testimonials || []; if (testimonials.length === 0 && page.content.testimonial) { testimonials = [page.content.testimonial]; }
-      const contentWithDefaults = { ...page.content, testimonials, formConfiguration: page.content.formConfiguration || DEFAULT_FORM_CONFIG, price: page.content.price || "49.90", currency: page.content.currency || "€", originalPrice: page.content.originalPrice || "99.90", generatedImages: page.content.generatedImages || (page.content.heroImageBase64 ? [page.content.heroImageBase64] : []), typography: page.content.typography || { fontFamily: 'sans', h1Size: 'lg', h2Size: 'md', bodySize: 'md' }, stockConfig: page.content.stockConfig || { enabled: false, quantity: 13 }, showFeatureIcons: page.content.showFeatureIcons || false, language: page.content.language || 'Italiano', showSocialProofBadge: page.content.showSocialProofBadge !== false, socialProofConfig: page.content.socialProofConfig || { enabled: true, intervalSeconds: 10, maxShows: 4 }, shippingCost: page.content.shippingCost || "0", enableShippingCost: page.content.enableShippingCost || false, insuranceConfig: page.content.insuranceConfig || { enabled: false, label: 'Assicurazione Spedizione VIP', cost: '4.99', defaultChecked: false }, customTypography: page.content.customTypography || {}, priceStyles: page.content.priceStyles || {}, reviewsPosition: page.content.reviewsPosition, customHeadHtml: page.custom_head_html || page.content.customHeadHtml || '', customThankYouHtml: page.custom_thankyou_html || page.content.customThankYouHtml || '', metaLandingHtml: page.content.metaLandingHtml || '', tiktokLandingHtml: page.content.tiktokLandingHtml || '', metaThankYouHtml: page.content.metaThankYouHtml || '', tiktokThankYouHtml: page.content.tiktokThankYouHtml || '', extraLandingHtml: page.content.extraLandingHtml || '', extraThankYouHtml: page.content.extraThankYouHtml || '', customThankYouUrl: page.content.customThankYouUrl || '', backgroundColor: page.content.backgroundColor, customThankYouTitle: page.content.customThankYouTitle, customThankYouMessage: page.content.customThankYouMessage };
-      setGeneratedContent(contentWithDefaults as GeneratedContent); setProduct({ name: page.product_name, niche: page.niche, description: "Caricato da pagina esistente", targetAudience: "N/A", tone: PageTone.PROFESSIONAL, language: contentWithDefaults.language, featureCount: contentWithDefaults.features?.length || 3, image: contentWithDefaults.heroImageBase64 }); if (page.content.templateId) { setSelectedTemplate(page.content.templateId); }
+      const contentWithDefaults = { ...page.content, testimonials, formConfiguration: page.content.formConfiguration || DEFAULT_FORM_CONFIG, price: page.content.price || "49.90", currency: page.content.currency || "€", originalPrice: page.content.originalPrice || "99.90", generatedImages: page.content.generatedImages || (page.content.heroImageBase64 ? [page.content.heroImageBase64] : []), typography: page.content.typography || { fontFamily: 'sans', h1Size: 'lg', h2Size: 'md', bodySize: 'md' }, stockConfig: page.content.stockConfig || { enabled: false, quantity: 13 }, showFeatureIcons: page.content.showFeatureIcons || false, language: page.content.language || 'Italiano', showSocialProofBadge: page.content.showSocialProofBadge !== false, socialProofConfig: page.content.socialProofConfig || { enabled: true, intervalSeconds: 10, maxShows: 4 }, shippingCost: page.content.shippingCost || "0", enableShippingCost: page.content.enableShippingCost || false, insuranceConfig: page.content.insuranceConfig || { enabled: false, label: 'Assicurazione Spedizione VIP', cost: '4.99', defaultChecked: false }, customTypography: page.content.customTypography || {}, priceStyles: page.content.priceStyles || {}, reviewsPosition: page.content.reviewsPosition, customHeadHtml: page.custom_head_html || page.content.customHeadHtml || '', customThankYouHtml: page.custom_thankyou_html || page.content.customThankYouHtml || '', metaLandingHtml: page.content.metaLandingHtml || '', tiktokLandingHtml: page.content.tiktokLandingHtml || '', metaThankYouHtml: page.content.metaThankYouHtml || '', tiktokThankYouHtml: page.content.tiktokThankYouHtml || '', extraLandingHtml: page.content.extraLandingHtml || '', extraThankYouHtml: page.content.extraThankYouHtml || '', customThankYouUrl: page.content.customThankYouUrl || '', backgroundColor: page.content.backgroundColor };
+      setGeneratedContent(contentWithDefaults as GeneratedContent);
+      setGeneratedThankYouContent(page.thank_you_content ? page.thank_you_content as GeneratedContent : createDefaultThankYouContent(contentWithDefaults as GeneratedContent));
+      setProduct({ name: page.product_name, niche: page.niche, description: "Caricato da pagina esistente", targetAudience: "N/A", tone: PageTone.PROFESSIONAL, language: contentWithDefaults.language, featureCount: contentWithDefaults.features?.length || 3, image: contentWithDefaults.heroImageBase64 }); if (page.content.templateId) { setSelectedTemplate(page.content.templateId); }
+      setEditingMode('landing');
   };
 
   const uploadImageToStorage = async (imageString: string): Promise<string> => {
@@ -521,41 +568,92 @@ const App: React.FC = () => {
   };
 
   const handleSaveToDb = async () => {
-    if (!generatedContent) return;
+    if (!generatedContent || !generatedThankYouContent) return;
     if (!session) { alert("Devi essere loggato per salvare."); return; }
     setIsSaving(true);
     try {
-        const contentToSave = JSON.parse(JSON.stringify(generatedContent));
+        const lpContentToSave = JSON.parse(JSON.stringify(generatedContent));
+        const tyContentToSave = JSON.parse(JSON.stringify(generatedThankYouContent));
+
         if (isSupabaseConfigured() && supabase) {
-            if (contentToSave.heroImageBase64) contentToSave.heroImageBase64 = await uploadImageToStorage(contentToSave.heroImageBase64);
-            if (contentToSave.generatedImages && contentToSave.generatedImages.length > 0) contentToSave.generatedImages = await Promise.all(contentToSave.generatedImages.map((img: string) => uploadImageToStorage(img)));
-            if (contentToSave.features) for (let i = 0; i < contentToSave.features.length; i++) { if (contentToSave.features[i].image) contentToSave.features[i].image = await uploadImageToStorage(contentToSave.features[i].image); }
-            if (contentToSave.testimonials) {
-                for (let i = 0; i < contentToSave.testimonials.length; i++) {
-                    if (contentToSave.testimonials[i].image) contentToSave.testimonials[i].image = await uploadImageToStorage(contentToSave.testimonials[i].image);
-                }
-            }
-            if (contentToSave.boxContent && contentToSave.boxContent.image) contentToSave.boxContent.image = await uploadImageToStorage(contentToSave.boxContent.image);
+            // Process landing page images
+            if (lpContentToSave.heroImageBase64) lpContentToSave.heroImageBase64 = await uploadImageToStorage(lpContentToSave.heroImageBase64);
+            if (lpContentToSave.generatedImages && lpContentToSave.generatedImages.length > 0) lpContentToSave.generatedImages = await Promise.all(lpContentToSave.generatedImages.map((img: string) => uploadImageToStorage(img)));
+            if (lpContentToSave.features) for (let i = 0; i < lpContentToSave.features.length; i++) { if (lpContentToSave.features[i].image) lpContentToSave.features[i].image = await uploadImageToStorage(lpContentToSave.features[i].image); }
+            if (lpContentToSave.testimonials) for (let i = 0; i < lpContentToSave.testimonials.length; i++) { if (lpContentToSave.testimonials[i].image) lpContentToSave.testimonials[i].image = await uploadImageToStorage(lpContentToSave.testimonials[i].image); }
+            if (lpContentToSave.boxContent && lpContentToSave.boxContent.image) lpContentToSave.boxContent.image = await uploadImageToStorage(lpContentToSave.boxContent.image);
+            
+            // Process thank you page images
+            if (tyContentToSave.heroImageBase64) tyContentToSave.heroImageBase64 = await uploadImageToStorage(tyContentToSave.heroImageBase64);
         }
-        const finalSlug = slug || formatSlug(product.name); const lang = generatedContent.language || 'Italiano'; const finalTySlug = tySlug || (finalSlug + getThankYouSuffix(lang)); const customHeadScript = contentToSave.customHeadHtml || ''; const customThankYouScript = contentToSave.customThankYouHtml || '';
-        const contentPayload = { ...contentToSave, templateId: selectedTemplate, thankYouConfig: { enabled: true, slugSuffix: getThankYouSuffix(lang) } };
+
+        const finalSlug = slug || formatSlug(product.name); 
+        const lang = generatedContent.language || 'Italiano'; 
+        const finalTySlug = tySlug || (finalSlug + getThankYouSuffix(lang)); 
+        const customHeadScript = lpContentToSave.customHeadHtml || ''; 
+        
+        // This is tricky, customThankyouHtml from the old model is now on the TY page content.
+        // Let's assume meta/tiktok fields on the TY content are what matters.
+        const customThankYouScript = tyContentToSave.customThankYouHtml || '';
+
+        const lpContentPayload = { ...lpContentToSave, templateId: selectedTemplate, thankYouConfig: { enabled: true, slugSuffix: getThankYouSuffix(lang) } };
+        
+        const dbPayload = {
+            product_name: product.name,
+            slug: finalSlug,
+            thank_you_slug: finalTySlug,
+            niche: product.niche,
+            content: lpContentPayload,
+            thank_you_content: tyContentToSave,
+            is_published: true,
+            custom_head_html: customHeadScript,
+            custom_thankyou_html: customThankYouScript // This field is now redundant but kept for safety
+        };
+
         if (isSupabaseConfigured() && supabase && session.id !== 'admin-local') {
             let error;
-            if (editingPageId) { const { error: updateError } = await supabase.from('landing_pages').update({ product_name: product.name, slug: finalSlug, thank_you_slug: finalTySlug, niche: product.niche, content: contentPayload, custom_head_html: customHeadScript, custom_thankyou_html: customThankYouScript }).eq('id', editingPageId); error = updateError; } else { const { error: insertError } = await supabase.from('landing_pages').insert({ product_name: product.name, slug: finalSlug, thank_you_slug: finalTySlug, niche: product.niche, content: contentPayload, is_published: true, custom_head_html: customHeadScript, custom_thankyou_html: customThankYouScript }); error = insertError; }
-            if (error) { console.error("Supabase save error:", error); alert("Errore salvataggio database: " + error.message); } else { alert(editingPageId ? "Pagina aggiornata con successo!" : "Pagina pubblicata con successo!"); await fetchPublicPages(); handleCloseEditor(); }
+            if (editingPageId) { 
+                const { error: updateError } = await supabase.from('landing_pages').update(dbPayload).eq('id', editingPageId); 
+                error = updateError;
+            } else { 
+                const { error: insertError } = await supabase.from('landing_pages').insert(dbPayload); 
+                error = insertError; 
+            }
+            if (error) { console.error("Supabase save error:", error); alert("Errore salvataggio database: " + error.message); } 
+            else { 
+                alert(editingPageId ? "Pagina aggiornata con successo!" : "Pagina pubblicata con successo!"); 
+                await fetchPublicPages(); 
+                handleCloseEditor(); 
+            }
         } else {
-            if (editingPageId) { setPublicPages(prev => prev.map(p => p.id === editingPageId ? { ...p, product_name: product.name, slug: finalSlug, thank_you_slug: finalTySlug, content: contentPayload, custom_head_html: customHeadScript, custom_thankyou_html: customThankYouScript } : p)); alert("Modalità Demo: Pagina aggiornata (Immagini non caricate su storage reale)."); } else { const newPage: LandingPageRow = { id: Date.now().toString(), created_at: new Date().toISOString(), product_name: product.name, slug: finalSlug, thank_you_slug: finalTySlug, niche: product.niche, content: contentPayload, is_published: true, custom_head_html: customHeadScript, custom_thankyou_html: customThankYouScript }; setPublicPages(prev => [newPage, ...prev]); alert("Modalità Demo: Pagina pubblicata (Immagini non caricate su storage reale)."); } handleCloseEditor();
+            // MOCK MODE
+            alert("Modalità Demo: Pagina salvata localmente.");
+            handleCloseEditor();
         }
     } catch (err) { console.error("Unexpected error saving:", err); alert("Errore imprevisto durante il salvataggio."); } finally { setIsSaving(false); }
   };
 
-  const handleCloseEditor = () => { setGeneratedContent(null); setEditingPageId(null); setSlug(''); setTySlug(''); setProduct({ name: '', niche: '', description: '', targetAudience: '', tone: PageTone.PROFESSIONAL, language: 'Italiano', image: undefined, images: [], featureCount: 3 }); setSelectedTemplate('gadget-cod'); setImageGenerationCount(1); setReviewCount(10); setGenTechImages(false); setGenBeforeAfter(false); setGenHumanUse(false); setCustomImagePrompt(''); setPreviewMode('landing'); }
+  const handleCloseEditor = () => { setGeneratedContent(null); setGeneratedThankYouContent(null); setEditingPageId(null); setSlug(''); setTySlug(''); setProduct({ name: '', niche: '', description: '', targetAudience: '', tone: PageTone.PROFESSIONAL, language: 'Italiano', image: undefined, images: [], featureCount: 3 }); setSelectedTemplate('gadget-cod'); setImageGenerationCount(1); setReviewCount(10); setGenTechImages(false); setGenBeforeAfter(false); setGenHumanUse(false); setCustomImagePrompt(''); setPreviewMode('landing'); setEditingMode('landing'); }
   const handleDiscard = () => { if(confirm("Sei sicuro? Le modifiche non salvate andranno perse.")) { handleCloseEditor(); } }
   const handleDeletePage = useCallback(async (id: string) => { if(!confirm("Sei sicuro di voler eliminare questa pagina?")) return; if (isSupabaseConfigured() && supabase && session?.id !== 'admin-local') { await supabase.from('landing_pages').delete().eq('id', id); fetchPublicPages(); } else { setPublicPages(prev => prev.filter(p => p.id !== id)); } }, [session]);
-  const updateContentField = (field: keyof GeneratedContent, value: any) => { if (!generatedContent) return; setGeneratedContent({ ...generatedContent, [field]: value }); };
+  
+  const updateContentField = (field: keyof GeneratedContent, value: any) => {
+    const contentUpdater = editingMode === 'landing' ? setGeneratedContent : setGeneratedThankYouContent;
+    contentUpdater(prev => prev ? { ...prev, [field]: value } : null);
+  };
+  
   const updateFeature = (index: number, key: 'title' | 'description' | 'image' | 'showCta', value: any) => { if (!generatedContent) return; const newFeatures = [...generatedContent.features]; newFeatures[index] = { ...newFeatures[index], [key]: value }; setGeneratedContent({ ...generatedContent, features: newFeatures }); };
   const updateBenefit = (index: number, value: string) => { if (!generatedContent) return; const newBenefits = [...generatedContent.benefits]; newBenefits[index] = value; setGeneratedContent({ ...generatedContent, benefits: newBenefits }); };
-  const updateTypography = (field: keyof TypographyConfig, value: string) => { if (!generatedContent) return; const currentTypo = generatedContent.typography || { fontFamily: 'sans', h1Size: 'lg', h2Size: 'md', bodySize: 'md' }; setGeneratedContent({ ...generatedContent, typography: { ...currentTypo, [field]: value } }); };
+  
+  const updateTypography = (field: keyof TypographyConfig, value: string) => {
+      const contentUpdater = editingMode === 'landing' ? setGeneratedContent : setGeneratedThankYouContent;
+      contentUpdater(prev => {
+          if (!prev) return null;
+          const currentTypo = prev.typography || { fontFamily: 'sans', h1Size: 'lg', h2Size: 'md', bodySize: 'md' };
+          return { ...prev, typography: { ...currentTypo, [field]: value } };
+      });
+  };
+
   const updateCustomTypography = (field: 'h1' | 'h2' | 'h3' | 'body' | 'small' | 'cta', value: string) => { if (!generatedContent) return; const currentCustom = generatedContent.customTypography || {}; setGeneratedContent({ ...generatedContent, customTypography: { ...currentCustom, [field]: value } }); };
   const updatePriceStyles = (field: 'color' | 'fontSize', value: string) => { if (!generatedContent) return; const currentStyles = generatedContent.priceStyles || {}; setGeneratedContent({ ...generatedContent, priceStyles: { ...currentStyles, [field]: value } }); };
   const updateStockConfig = (key: 'enabled' | 'quantity' | 'textOverride', value: any) => { if (!generatedContent) return; const currentConfig = generatedContent.stockConfig || { enabled: false, quantity: 13 }; setGeneratedContent({ ...generatedContent, stockConfig: { ...currentConfig, [key]: value } }); };
@@ -567,21 +665,23 @@ const App: React.FC = () => {
   const updateBoxContent = (field: 'enabled' | 'title' | 'items' | 'image', value: any) => { if (!generatedContent) return; const currentBox = generatedContent.boxContent || { enabled: false, title: "Ordinando oggi ricevi:", items: [] }; setGeneratedContent({ ...generatedContent, boxContent: { ...currentBox, [field]: value } }); };
   const updateFormConfig = (index: number, field: keyof FormFieldConfig, value: any) => { if (!generatedContent || !generatedContent.formConfiguration) return; const newConfig = [...generatedContent.formConfiguration]; newConfig[index] = { ...newConfig[index], [field]: value }; if (field === 'enabled' && value === false) { newConfig[index].required = false; } setGeneratedContent({ ...generatedContent, formConfiguration: newConfig }); };
   const updateUiTranslation = (key: keyof UiTranslation, value: string) => { if (!generatedContent || !generatedContent.uiTranslation) return; setGeneratedContent({ ...generatedContent, uiTranslation: { ...generatedContent.uiTranslation, [key]: value } }); };
-  const handleViewPage = useCallback((page: LandingPageRow) => { const contentWithScripts = { ...page.content, customHeadHtml: page.custom_head_html || page.content.customHeadHtml, customThankYouHtml: page.custom_thankyou_html || page.content.customThankYouHtml }; setSelectedPublicPage(contentWithScripts); const tySlug = page.thank_you_slug || (page.slug ? `${page.slug}${getThankYouSuffix(page.content.language || 'Italiano')}` : undefined); setCurrentThankYouSlug(tySlug); setView('product_view'); const param = page.slug ? `s=${page.slug}` : `p=${page.id}`; window.history.pushState({}, '', `?${param}`); }, []);
+  const handleViewPage = useCallback((page: LandingPageRow) => { setSelectedPublicPage(page); setView('product_view'); const param = page.slug ? `s=${page.slug}` : `p=${page.id}`; window.history.pushState({}, '', `?${param}`); }, []);
 
   // ... (Render logic) ...
   if (view === 'product_view' && selectedPublicPage) {
+      const contentWithScripts = { ...selectedPublicPage.content, customHeadHtml: selectedPublicPage.custom_head_html || selectedPublicPage.content.customHeadHtml, customThankYouHtml: selectedPublicPage.custom_thankyou_html || selectedPublicPage.content.customThankYouHtml };
       return (
         <div className="relative">
             <div className="fixed top-3 left-3 z-[100] md:left-3 left-auto right-3 md:right-auto"><button onClick={() => { setView('home'); window.history.pushState({}, '', window.location.pathname); }} className="hidden md:flex bg-white/80 backdrop-blur-md text-slate-800 p-2 md:px-4 md:py-2 rounded-full shadow-sm border border-slate-200/50 hover:bg-white hover:shadow-md transition-all items-center gap-2 group" title="Torna allo Shop"><ChevronLeft className="w-5 h-5 group-hover:-translate-x-0.5 transition-transform" /> <span className="hidden md:inline font-bold text-sm">Torna allo Shop</span></button></div>
             {session && (<div className="fixed top-3 right-3 z-[100]"><button onClick={() => setView('admin')} className="bg-emerald-600/90 backdrop-blur text-white p-2 md:px-4 md:py-2 rounded-full shadow-lg hover:bg-emerald-600 transition flex items-center gap-2 font-bold" title="Dashboard Admin"><LayoutDashboard className="w-5 h-5" /> <span className="hidden md:inline">Dashboard Admin</span></button></div>)}
-            <LandingPage content={selectedPublicPage} thankYouSlug={currentThankYouSlug} onRedirect={(data) => { setOrderData(data); setView('thank_you_view'); window.scrollTo(0,0); try { const lang = selectedPublicPage?.language || 'Italiano'; const suffix = getThankYouSuffix(lang); let targetSlug = currentThankYouSlug; if (!targetSlug && selectedPublicPage) { const currentSlugParam = new URLSearchParams(window.location.search).get('s'); targetSlug = (currentSlugParam || formatSlug(selectedPublicPage.headline)) + suffix; } const nextUrl = new URL(window.location.href); nextUrl.search = ''; if (targetSlug) nextUrl.searchParams.set('s', targetSlug.replace(/^\//, '')); window.history.pushState({}, '', nextUrl.toString()); } catch (e) { console.warn("Navigation/Redirect failed (benign in preview):", e); } }} />
+            <LandingPage content={contentWithScripts} thankYouSlug={selectedPublicPage.thank_you_slug} onRedirect={(data) => { setOrderData(data); setView('thank_you_view'); window.scrollTo(0,0); try { const nextUrl = new URL(window.location.href); nextUrl.search = ''; if (selectedPublicPage.thank_you_slug) nextUrl.searchParams.set('s', selectedPublicPage.thank_you_slug.replace(/^\//, '')); window.history.pushState({}, '', nextUrl.toString()); } catch (e) { console.warn("Navigation/Redirect failed (benign in preview):", e); } }} />
         </div>
       );
   }
 
   if (view === 'thank_you_view' && selectedPublicPage) {
-      return ( <div className="relative"> {session && (<div className="fixed top-3 right-3 z-[100]"><button onClick={() => setView('admin')} className="bg-emerald-600 text-white p-2 rounded-full shadow"><LayoutDashboard className="w-4 h-4"/></button></div>)} <ThankYouPage content={selectedPublicPage} initialData={orderData} /> </div> )
+      const tyContent = selectedPublicPage.thank_you_content || createDefaultThankYouContent(selectedPublicPage.content);
+      return ( <div className="relative"> {session && (<div className="fixed top-3 right-3 z-[100]"><button onClick={() => setView('admin')} className="bg-emerald-600 text-white p-2 rounded-full shadow"><LayoutDashboard className="w-4 h-4"/></button></div>)} <ThankYouPage content={tyContent} initialData={orderData} /> </div> )
   }
 
   if (view === 'admin' && session) {
@@ -628,7 +728,7 @@ const App: React.FC = () => {
                                             <div className="space-y-4">
                                                 <div><label className="block text-xs font-medium text-slate-400 mb-1">Nome Prodotto</label><input type="text" value={product.name} onChange={(e) => setProduct({...product, name: e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="es. Integratore FocusPro"/></div>
                                                 <div className="grid grid-cols-2 gap-3"><div><label className="block text-xs font-medium text-slate-400 mb-1">Nicchia</label><input type="text" value={product.niche} onChange={(e) => setProduct({...product, niche: e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="es. Salute"/></div><div><label className="block text-xs font-medium text-slate-400 mb-1">Target</label><input type="text" value={product.targetAudience} onChange={(e) => setProduct({...product, targetAudience: e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="es. Studenti"/></div></div>
-                                                <div><label className="block text-xs font-medium text-slate-400 mb-1">Foto (Carica più immagini)</label><div className="flex flex-col gap-2"><div className="w-full border border-dashed border-slate-600 hover:border-emerald-500 rounded-lg p-3 text-center cursor-pointer transition bg-slate-900/50 flex flex-col items-center justify-center gap-1 group" onClick={() => fileInputRef.current?.click()}><Images className="w-5 h-5 text-slate-500 group-hover:text-emerald-400" /><span className="text-[10px] text-slate-400">Carica Foto Prodotto</span><input type="file" ref={fileInputRef} className="hidden" multiple accept="image/*" onChange={handleImageUpload} /></div>{product.images && product.images.length > 0 && (<div className="grid grid-cols-4 gap-2 mt-2">{product.images.map((img, idx) => (<div key={idx} className="relative aspect-square rounded border border-slate-600 overflow-hidden group"><img src={img} alt={`Preview ${idx}`} className="w-full h-full object-cover" /><button onClick={(e) => { e.stopPropagation(); removeImage(idx); }} className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition text-white"><X className="w-4 h-4" /></button></div>))}</div>)}</div>{product.images && product.images.length > 0 && (<div className="bg-slate-900 p-2 rounded-lg border border-slate-700 mt-2 space-y-2"><div className="flex items-center justify-between"><span className="text-[10px] text-slate-400">Genera altre varianti AI?</span><div className="flex items-center gap-2"><span className="text-xs font-bold text-emerald-400">{imageGenerationCount}</span><input type="range" min="0" max="5" value={imageGenerationCount} onChange={(e) => setImageGenerationCount(parseInt(e.target.value))} className="w-20 accent-emerald-500 h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer"/></div></div><div className="flex flex-col gap-2 pt-1 border-t border-slate-800"><div className="flex items-center gap-3"><label className="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" checked={genTechImages} onChange={(e) => setGenTechImages(e.target.checked)} className="w-3 h-3 accent-emerald-500 rounded"/><span className="text-[10px] text-slate-300">Tecniche/Esploso</span></label><label className="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" checked={genBeforeAfter} onChange={(e) => setGenBeforeAfter(e.target.checked)} className="w-3 h-3 accent-emerald-500 rounded"/><span className="text-[10px] text-slate-300">Prima/Dopo</span></label></div><label className="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" checked={genHumanUse} onChange={(e) => setGenHumanUse(e.target.checked)} className="w-3 h-3 accent-emerald-500 rounded"/><span className="text-[10px] text-slate-300">Umano/Lifestyle <span className="text-slate-500">(Usato da una persona)</span></span></label><div><input type="text" value={customImagePrompt} onChange={(e) => setCustomImagePrompt(e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-[10px] text-white placeholder-slate-500" placeholder="Prompt opzionale (es: ambientato in montagna...)"/></div></div></div>)}</div>
+                                                <div><label className="block text-xs font-medium text-slate-400 mb-1">Foto (Carica più immagini)</label><div className="flex flex-col gap-2"><div className="w-full border border-dashed border-slate-600 hover:border-emerald-500 rounded-lg p-3 text-center cursor-pointer transition bg-slate-900/50 flex flex-col items-center justify-center gap-1 group" onClick={() => fileInputRef.current?.click()}><Images className="w-5 h-5 text-slate-500 group-hover:text-emerald-400" /><span className="text-[10px] text-slate-400">Carica Foto Prodotto</span><input type="file" ref={fileInputRef} className="hidden" multiple accept="image/*" onChange={(e) => handleImageUpload(e)} /></div>{product.images && product.images.length > 0 && (<div className="grid grid-cols-4 gap-2 mt-2">{product.images.map((img, idx) => (<div key={idx} className="relative aspect-square rounded border border-slate-600 overflow-hidden group"><img src={img} alt={`Preview ${idx}`} className="w-full h-full object-cover" /><button onClick={(e) => { e.stopPropagation(); removeImage(idx); }} className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition text-white"><X className="w-4 h-4" /></button></div>))}</div>)}</div>{product.images && product.images.length > 0 && (<div className="bg-slate-900 p-2 rounded-lg border border-slate-700 mt-2 space-y-2"><div className="flex items-center justify-between"><span className="text-[10px] text-slate-400">Genera altre varianti AI?</span><div className="flex items-center gap-2"><span className="text-xs font-bold text-emerald-400">{imageGenerationCount}</span><input type="range" min="0" max="5" value={imageGenerationCount} onChange={(e) => setImageGenerationCount(parseInt(e.target.value))} className="w-20 accent-emerald-500 h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer"/></div></div><div className="flex flex-col gap-2 pt-1 border-t border-slate-800"><div className="flex items-center gap-3"><label className="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" checked={genTechImages} onChange={(e) => setGenTechImages(e.target.checked)} className="w-3 h-3 accent-emerald-500 rounded"/><span className="text-[10px] text-slate-300">Tecniche/Esploso</span></label><label className="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" checked={genBeforeAfter} onChange={(e) => setGenBeforeAfter(e.target.checked)} className="w-3 h-3 accent-emerald-500 rounded"/><span className="text-[10px] text-slate-300">Prima/Dopo</span></label></div><label className="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" checked={genHumanUse} onChange={(e) => setGenHumanUse(e.target.checked)} className="w-3 h-3 accent-emerald-500 rounded"/><span className="text-[10px] text-slate-300">Umano/Lifestyle <span className="text-slate-500">(Usato da una persona)</span></span></label><div><input type="text" value={customImagePrompt} onChange={(e) => setCustomImagePrompt(e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-[10px] text-white placeholder-slate-500" placeholder="Prompt opzionale (es: ambientato in montagna...)"/></div></div></div>)}</div>
                                                 <div><label className="block text-xs font-medium text-slate-400 mb-1">Descrizione</label><textarea value={product.description} onChange={(e) => setProduct({...product, description: e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white focus:ring-2 focus:ring-emerald-500 outline-none h-24" placeholder="Punti di forza..."/></div>
                                                 <div className="grid grid-cols-2 gap-3"><div><label className="block text-xs font-medium text-slate-400 mb-1">Tono</label><select value={product.tone} onChange={(e) => setProduct({...product, tone: e.target.value as PageTone})} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white focus:ring-2 focus:ring-emerald-500 outline-none">{Object.values(PageTone).map((t) => (<option key={t} value={t}>{t}</option>))}</select></div><div><label className="block text-xs font-medium text-slate-400 mb-1 flex items-center gap-1"><Globe className="w-3 h-3"/> Lingua Landing</label><select value={product.language} onChange={(e) => setProduct({...product, language: e.target.value})} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white focus:ring-2 focus:ring-emerald-500 outline-none">{SUPPORTED_LANGUAGES.map((l) => (<option key={l.code} value={l.code}>{l.label}</option>))}</select></div></div>
                                                 <div><label className="block text-xs font-medium text-slate-400 mb-1">Numero Paragrafi/Features</label><div className="flex items-center gap-2 h-10 bg-slate-900 border border-slate-700 rounded-lg px-2"><input type="range" min="1" max="20" value={product.featureCount || 3} onChange={(e) => setProduct({...product, featureCount: parseInt(e.target.value)})} className="flex-1 accent-emerald-500 h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer"/><span className="text-xs font-bold text-white w-5 text-center">{product.featureCount || 3}</span></div></div>
@@ -641,11 +741,17 @@ const App: React.FC = () => {
                             </>
                         ) : (
                             <div className="animate-in fade-in slide-in-from-left-4 duration-300">
-                                <div className="flex items-center gap-2 mb-6">
+                                <div className="flex items-center gap-2 mb-4">
                                     <button onClick={handleDiscard} className="p-2 hover:bg-slate-800 rounded-full transition"><ArrowLeft className="w-5 h-5 text-slate-400" /></button>
-                                    <div><h1 className="text-2xl font-bold text-white mb-0.5">Modifica Contenuti</h1><p className="text-slate-400 text-xs">{editingPageId ? "Modifica pagina esistente" : "Rifinisci prima di pubblicare"}</p></div>
+                                    <div><h1 className="text-2xl font-bold text-white mb-0.5">Modifica Pagina</h1><p className="text-slate-400 text-xs">{product.name}</p></div>
                                 </div>
-                                <div className="bg-slate-800 rounded-2xl p-6 shadow-2xl border border-slate-700 max-h-[calc(100vh-140px)] overflow-y-auto scrollbar-thin scrollbar-thumb-emerald-600">
+                                <div className="flex items-center gap-2 mb-4 p-1 bg-slate-900 rounded-lg border border-slate-700">
+                                    <button onClick={() => setEditingMode('landing')} className={`flex-1 text-center py-2 px-3 rounded-md text-sm font-bold transition flex items-center justify-center gap-2 ${editingMode === 'landing' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-700'}`}><FileTextIcon className="w-4 h-4"/> Landing Page</button>
+                                    <button onClick={() => setEditingMode('thankyou')} className={`flex-1 text-center py-2 px-3 rounded-md text-sm font-bold transition flex items-center justify-center gap-2 ${editingMode === 'thankyou' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-700'}`}><Check className="w-4 h-4"/> Thank You Page</button>
+                                </div>
+
+                                <div className="bg-slate-800 rounded-2xl p-6 shadow-2xl border border-slate-700 max-h-[calc(100vh-220px)] overflow-y-auto scrollbar-thin scrollbar-thumb-emerald-600">
+                                    {editingMode === 'landing' ? (
                                     <div className="space-y-8">
                                         <div className="border-b border-slate-700 pb-4">
                                             <div className="flex items-center gap-2 mb-3"><LinkIcon className="w-4 h-4 text-emerald-400" /><label className="block text-xs font-bold text-emerald-400 uppercase tracking-wide">URL & Link</label></div>
@@ -1014,24 +1120,58 @@ const App: React.FC = () => {
                                                      </div>
                                                      <div className="mt-2">
                                                          <label className="text-[10px] text-slate-400">Extra HTML (Body - Landing)</label>
-                                                         <textarea value={generatedContent.extraLandingHtml || ''} onChange={(e) => updateContentField('extraLandingHtml', e.target.value)} className="w-full h-20 bg-slate-800 border border-slate-600 rounded p-1 text-[10px] text-white font-mono"/>
+                                                         <textarea value={generatedContent.extraLandingHtml || ''} onChange={(e) => updateContentField('extraLandingHtml', e.target.value)} className="w-full h-20 bg-slate-800 border border-slate-600 rounded p-1 text-[10px] text-white font-mono"/></div>
                                                      </div>
-                                                     <div className="mt-2">
-                                                         <label className="text-[10px] text-slate-400">Extra HTML (Body - Thank You)</label>
-                                                         <textarea value={generatedContent.extraThankYouHtml || ''} onChange={(e) => updateContentField('extraThankYouHtml', e.target.value)} className="w-full h-20 bg-slate-800 border border-slate-600 rounded p-1 text-[10px] text-white font-mono"/>
-                                                     </div>
-                                                </div>
                                                 <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700">
-                                                     <label className="text-xs font-bold text-slate-300 mb-2 block">Thank You Page</label>
+                                                     <label className="text-xs font-bold text-slate-300 mb-2 block">Redirect Avanzato</label>
                                                      <div><label className="text-[10px] text-slate-400">URL Redirect (Opzionale, sovrascrive pagina di grazie)</label><input type="text" value={generatedContent.customThankYouUrl || ''} onChange={(e) => updateContentField('customThankYouUrl', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded p-1 text-xs text-white" placeholder="https://..."/></div>
-                                                     <div className="grid grid-cols-2 gap-2 mt-2">
-                                                        <div><label className="text-[10px] text-slate-400">Titolo (Usa {'{name}'})</label><input type="text" value={generatedContent.customThankYouTitle || ''} onChange={(e) => updateContentField('customThankYouTitle', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded p-1 text-xs text-white"/></div>
-                                                        <div><label className="text-[10px] text-slate-400">Messaggio (Usa {'{phone}'})</label><input type="text" value={generatedContent.customThankYouMessage || ''} onChange={(e) => updateContentField('customThankYouMessage', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded p-1 text-xs text-white"/></div>
-                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
+                                    ) : (
+                                    // THANK YOU PAGE EDITOR
+                                    <div className="space-y-8 animate-in fade-in">
+                                         <div>
+                                            <label className="block text-xs font-bold text-emerald-400 uppercase tracking-wide mb-2">1. Contenuti</label>
+                                            <div className="space-y-3">
+                                                <div><label className="text-[10px] text-slate-400">Titolo (Usa {'{name}'})</label><textarea value={generatedThankYouContent.headline} onChange={(e) => updateContentField('headline', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white h-16"/></div>
+                                                <div><label className="text-[10px] text-slate-400">Messaggio (Usa {'{phone}'})</label><textarea value={generatedThankYouContent.subheadline} onChange={(e) => updateContentField('subheadline', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white h-24"/></div>
+                                                <div>
+                                                  <label className="text-[10px] text-slate-400 mb-1 block">Immagine (Opzionale)</label>
+                                                  <div className="flex items-center gap-2">
+                                                      <div className="w-20 h-20 bg-slate-900 border border-dashed border-slate-600 rounded flex items-center justify-center cursor-pointer hover:border-emerald-500 overflow-hidden relative group" onClick={() => tyImageInputRef.current?.click()}>
+                                                          {generatedThankYouContent.heroImageBase64 ? <img src={generatedThankYouContent.heroImageBase64} className="w-full h-full object-cover"/> : <ImageIcon className="w-6 h-6 text-slate-500"/>}
+                                                          <input type="file" ref={tyImageInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageUpload(e, true)} />
+                                                      </div>
+                                                      {generatedThankYouContent.heroImageBase64 && <button onClick={() => updateContentField('heroImageBase64', undefined)} className="text-xs text-red-400 hover:text-red-300">Rimuovi</button>}
+                                                  </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="border-t border-slate-700 pt-4">
+                                            <label className="block text-xs font-bold text-emerald-400 uppercase tracking-wide mb-2">2. Stile</label>
+                                             <div>
+                                                <label className="text-[10px] text-slate-400 mb-1 block">Colore Sfondo Pagina</label>
+                                                <div className="flex items-center gap-2">
+                                                     <input type="color" value={generatedThankYouContent.backgroundColor || '#f8fafc'} onChange={(e) => updateContentField('backgroundColor', e.target.value)} className="w-8 h-8 rounded border-none bg-transparent" />
+                                                     <input type="text" value={generatedThankYouContent.backgroundColor || ''} onChange={(e) => updateContentField('backgroundColor', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded p-1 text-xs text-white" placeholder="#f8fafc"/>
+                                                </div>
+                                             </div>
+                                        </div>
+                                         <div className="border-t border-slate-700 pt-4">
+                                            <label className="block text-xs font-bold text-emerald-400 uppercase tracking-wide mb-2">3. Script & Avanzate</label>
+                                            <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700">
+                                                 <label className="text-xs font-bold text-slate-300 mb-2 block">Pixel & Script (HTML)</label>
+                                                 <div className="space-y-2">
+                                                     <div><label className="text-[10px] text-slate-400">Meta / Head</label><textarea value={generatedThankYouContent.metaThankYouHtml || ''} onChange={(e) => updateContentField('metaThankYouHtml', e.target.value)} className="w-full h-20 bg-slate-800 border border-slate-600 rounded p-1 text-[10px] text-white font-mono"/></div>
+                                                     <div><label className="text-[10px] text-slate-400">TikTok</label><textarea value={generatedThankYouContent.tiktokThankYouHtml || ''} onChange={(e) => updateContentField('tiktokThankYouHtml', e.target.value)} className="w-full h-20 bg-slate-800 border border-slate-600 rounded p-1 text-[10px] text-white font-mono"/></div>
+                                                     <div><label className="text-[10px] text-slate-400">Extra HTML (Body)</label><textarea value={generatedThankYouContent.extraThankYouHtml || ''} onChange={(e) => updateContentField('extraThankYouHtml', e.target.value)} className="w-full h-20 bg-slate-800 border border-slate-600 rounded p-1 text-[10px] text-white font-mono"/></div>
+                                                 </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    )}
                                 </div>
                             </div>
                         )}
@@ -1054,13 +1194,13 @@ const App: React.FC = () => {
                                     <div className="flex items-center gap-2 bg-slate-800 p-1 rounded-lg border border-slate-700"><button onClick={() => setPreviewDevice('mobile')} className={`px-3 py-1.5 rounded-md transition ${previewDevice === 'mobile' ? 'bg-slate-700 text-white shadow' : 'text-slate-400 hover:text-white'}`}><Smartphone className="w-4 h-4" /></button><button onClick={() => setPreviewDevice('tablet')} className={`px-3 py-1.5 rounded-md transition ${previewDevice === 'tablet' ? 'bg-slate-700 text-white shadow' : 'text-slate-400 hover:text-white'}`}><Tablet className="w-4 h-4" /></button><button onClick={() => setPreviewDevice('desktop')} className={`px-3 py-1.5 rounded-md transition ${previewDevice === 'desktop' ? 'bg-slate-700 text-white shadow' : 'text-slate-400 hover:text-white'}`}><Monitor className="w-4 h-4" /></button></div>
                                     <div className="flex items-center gap-2 bg-slate-800 p-1 rounded-lg border border-slate-700"><button onClick={() => setPreviewMode('landing')} className={`px-3 py-1.5 rounded-md transition text-xs font-bold ${previewMode === 'landing' ? 'bg-slate-700 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Landing</button><button onClick={() => setPreviewMode('thankyou')} className={`px-3 py-1.5 rounded-md transition text-xs font-bold ${previewMode === 'thankyou' ? 'bg-slate-700 text-white shadow' : 'text-slate-400 hover:text-white'}`}>Thank You</button></div>
                                     <div className="flex items-center gap-3">
-                                        <button onClick={() => { setView('preview'); setPreviewMode('landing'); }} className="text-sm text-slate-400 hover:text-white flex items-center gap-1.5 font-bold"><Eye className="w-4 h-4"/> Anteprima Reale</button>
+                                        <button onClick={() => { setView('preview'); setPreviewMode(editingMode); }} className="text-sm text-slate-400 hover:text-white flex items-center gap-1.5 font-bold"><Eye className="w-4 h-4"/> Anteprima Reale</button>
                                         <button onClick={handleSaveToDb} disabled={isSaving} className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-6 rounded-lg shadow-lg transition flex items-center gap-2">{isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>} {editingPageId ? "Aggiorna" : "Pubblica"}</button>
                                     </div>
                                 </div>
                                 <div className={`mx-auto rounded-2xl border-8 border-slate-800 shadow-2xl overflow-hidden transition-all duration-300 bg-white ${previewDevice === 'mobile' ? 'w-[375px] h-[667px]' : (previewDevice === 'tablet' ? 'w-[768px] h-[1024px]' : 'w-full h-[calc(100vh-160px)]')}`}>
                                     <div className="w-full h-full overflow-y-auto scrollbar-thin scrollbar-thumb-slate-400">
-                                        {previewMode === 'landing' ? <LandingPage content={generatedContent} onRedirect={() => setPreviewMode('thankyou')} /> : <ThankYouPage content={generatedContent} initialData={{ name: 'Mario Rossi', phone: '3331234567' }}/>}
+                                        {previewMode === 'landing' ? <LandingPage content={generatedContent} onRedirect={() => setPreviewMode('thankyou')} /> : (generatedThankYouContent && <ThankYouPage content={generatedThankYouContent} initialData={{ name: 'Mario Rossi', phone: '3331234567' }}/>)}
                                     </div>
                                 </div>
                             </div>
@@ -1078,7 +1218,7 @@ const App: React.FC = () => {
       return (
           <div className="relative">
               <div className="fixed top-3 left-3 z-[100]"><button onClick={() => setView('admin')} className="bg-white/80 backdrop-blur-md text-slate-800 px-4 py-2 rounded-full shadow-lg border border-slate-200/50 hover:bg-white hover:shadow-xl transition-all flex items-center gap-2 group" title="Torna all'Editor"><ChevronLeft className="w-5 h-5 group-hover:-translate-x-0.5 transition-transform" /> <span className="font-bold">Torna all'Editor</span></button></div>
-              {previewMode === 'landing' ? <LandingPage content={generatedContent} onRedirect={() => setPreviewMode('thankyou')} /> : <ThankYouPage content={generatedContent} />}
+              {previewMode === 'landing' ? <LandingPage content={generatedContent} onRedirect={() => setPreviewMode('thankyou')} /> : (generatedThankYouContent && <ThankYouPage content={generatedThankYouContent} />)}
           </div>
       )
   }

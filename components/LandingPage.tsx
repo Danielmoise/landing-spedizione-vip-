@@ -697,26 +697,34 @@ export const ThankYouPage: React.FC<{ content: GeneratedContent; initialData?: O
     const [params] = useState(new URLSearchParams(window.location.search));
     const name = initialData?.name || params.get('name') || 'Cliente';
     const phone = initialData?.phone || params.get('phone') || '...';
-    const price = initialData?.price || params.get('price') || '0.00';
     const labels = { ...DEFAULT_LABELS, ...(content.uiTranslation || {}) };
 
-    // Use custom content if available, otherwise default to labels (which are translated)
-    const titleTemplate = content.customThankYouTitle || labels.thankYouTitle;
-    const msgTemplate = content.customThankYouMessage || labels.thankYouMsg;
+    // The component now uses its own headline and subheadline for content.
+    const titleTemplate = content.headline || labels.thankYouTitle;
+    const msgTemplate = content.subheadline || labels.thankYouMsg;
+    const backgroundStyle = content.backgroundColor ? { backgroundColor: content.backgroundColor } : {};
+    const heroImage = content.heroImageBase64 || (content.generatedImages && content.generatedImages.length > 0 ? content.generatedImages[0] : null);
+
 
     useEffect(() => {
+        // Scripts are now sourced from the thank_you_content object
         if (content.customThankYouHtml) injectCustomScript(content.customThankYouHtml);
         if (content.metaThankYouHtml) injectCustomScript(content.metaThankYouHtml);
         if (content.tiktokThankYouHtml) injectCustomScript(content.tiktokThankYouHtml);
     }, [content.customThankYouHtml, content.metaThankYouHtml, content.tiktokThankYouHtml]);
 
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 animate-in fade-in duration-500 relative">
+        <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 animate-in fade-in duration-500 relative" style={backgroundStyle}>
             <div className="max-w-md w-full bg-white p-8 rounded-3xl shadow-xl border border-slate-100 text-center relative z-10">
                 <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 animate-in zoom-in duration-500 shadow-sm ring-4 ring-green-50">
                     <CheckCircle className="w-12 h-12 text-green-600" />
                 </div>
                 <h3 className="text-3xl font-black text-slate-900 mb-4 leading-tight">{titleTemplate.replace('{name}', name)}</h3>
+                 {heroImage && (
+                    <div className="my-6 rounded-xl overflow-hidden shadow-md border border-slate-100">
+                        <img src={heroImage} alt="Thank You" className="w-full h-auto object-cover" />
+                    </div>
+                )}
                 <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 mb-8 relative">
                         <div className="absolute -top-3 -right-3 bg-blue-500 text-white p-1.5 rounded-full shadow-md"><Phone className="w-4 h-4" /></div>
                         <p className="text-slate-600 leading-relaxed font-medium text-lg">{msgTemplate.replace('{phone}', phone)}</p>
@@ -726,7 +734,7 @@ export const ThankYouPage: React.FC<{ content: GeneratedContent; initialData?: O
                 </button>
             </div>
             {content.extraThankYouHtml && (<div className="w-full max-w-4xl mx-auto mt-8 relative z-0" dangerouslySetInnerHTML={{ __html: content.extraThankYouHtml }} />)}
-            <p className="mt-8 text-slate-400 text-xs">{content.typography?.fontFamily} © {new Date().getFullYear()}</p>
+            <p className="mt-8 text-slate-400 text-xs">© {new Date().getFullYear()}</p>
         </div>
     );
 };

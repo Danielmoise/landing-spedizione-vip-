@@ -191,10 +191,6 @@ export interface GeneratedContent {
   customThankYouHtml?: string; 
   customThankYouUrl?: string; // NEW: Full URL redirect override
   
-  // NEW: Custom Thank You Messages (Per Page Override)
-  customThankYouTitle?: string;
-  customThankYouMessage?: string;
-
   // NEW: Generic Extra HTML (for body/visual injection)
   extraLandingHtml?: string;
   extraThankYouHtml?: string;
@@ -224,6 +220,7 @@ export interface LandingPageRow {
   thank_you_slug?: string; // NEW: Thank you page slug
   niche: string;
   content: GeneratedContent;
+  thank_you_content?: GeneratedContent; // NEW: Independent content for thank you page
   is_published: boolean;
   // New columns for scripts
   custom_head_html?: string;
