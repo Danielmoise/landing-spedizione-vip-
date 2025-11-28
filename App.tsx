@@ -857,6 +857,161 @@ const App: React.FC = () => {
                                             </div>
                                             <button onClick={handleGenerateMoreReviews} disabled={isGeneratingReviews} className="w-full mt-3 py-2 bg-slate-700/50 text-emerald-400 text-xs font-bold rounded-lg border border-slate-700 hover:bg-slate-700 flex items-center justify-center gap-2">{isGeneratingReviews ? <Loader2 className="w-3 h-3 animate-spin"/> : <Sparkles className="w-3 h-3"/>} Genera Altre Recensioni</button>
                                         </div>
+                                        {/* 6. Form & Webhook */}
+                                        <div className="border-t border-slate-700 pt-4">
+                                            <label className="block text-xs font-bold text-emerald-400 uppercase tracking-wide mb-2">6. Form & Webhook</label>
+                                            <div className="space-y-3">
+                                                <div>
+                                                    <label className="text-[10px] text-slate-400 mb-1 block">Webhook URL</label>
+                                                    <input 
+                                                        type="text" 
+                                                        value={generatedContent.webhookUrl || ''} 
+                                                        onChange={(e) => updateContentField('webhookUrl', e.target.value)} 
+                                                        className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white font-mono"
+                                                        placeholder="https://hook.make.com/..."
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] text-slate-400 mb-1 block">Campi del Form</label>
+                                                    <div className="space-y-1">
+                                                        {(generatedContent.formConfiguration || []).map((field, index) => (
+                                                            <div key={field.id} className="grid grid-cols-12 gap-2 items-center bg-slate-900/50 p-1.5 rounded">
+                                                                <span className="col-span-4 text-xs text-slate-300 truncate">{field.label}</span>
+                                                                <div className="col-span-5">
+                                                                    <input 
+                                                                        type="text" 
+                                                                        value={field.label} 
+                                                                        onChange={(e) => updateFormConfig(index, 'label', e.target.value)}
+                                                                        className="w-full bg-slate-800 border border-slate-700 rounded p-1 text-[10px] text-white"
+                                                                    />
+                                                                </div>
+                                                                <label className="col-span-2 flex items-center justify-center gap-1 cursor-pointer text-[10px]">
+                                                                    <input 
+                                                                        type="checkbox" 
+                                                                        checked={field.enabled} 
+                                                                        onChange={(e) => updateFormConfig(index, 'enabled', e.target.checked)}
+                                                                        className="w-3 h-3 accent-emerald-500 rounded"
+                                                                    /> 
+                                                                    <span className={field.enabled ? 'text-slate-300' : 'text-slate-500'}>On</span>
+                                                                </label>
+                                                                <label className="col-span-1 flex items-center justify-center gap-1 cursor-pointer text-[10px]">
+                                                                    <input 
+                                                                        type="checkbox" 
+                                                                        checked={field.required}
+                                                                        disabled={!field.enabled}
+                                                                        onChange={(e) => updateFormConfig(index, 'required', e.target.checked)}
+                                                                        className="w-3 h-3 accent-emerald-500 rounded disabled:opacity-50"
+                                                                    />
+                                                                </label>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {/* 7. Stile & Colori */}
+                                        <div className="border-t border-slate-700 pt-4">
+                                            <label className="block text-xs font-bold text-emerald-400 uppercase tracking-wide mb-2">7. Stile & Colori</label>
+                                            <div className="space-y-4">
+                                                <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700">
+                                                    <label className="text-xs font-bold text-slate-300 mb-2 block">Tipografia</label>
+                                                    <div className="grid grid-cols-3 gap-2">
+                                                        <div>
+                                                            <label className="text-[10px] text-slate-400">Font</label>
+                                                            <select value={generatedContent.typography?.fontFamily} onChange={(e) => updateTypography('fontFamily', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded p-1 text-xs text-white">
+                                                                <option value="sans">Sans Serif</option>
+                                                                <option value="serif">Serif</option>
+                                                                <option value="mono">Mono</option>
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[10px] text-slate-400">Dim. H1</label>
+                                                            <select value={generatedContent.typography?.h1Size} onChange={(e) => updateTypography('h1Size', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded p-1 text-xs text-white">
+                                                                <option value="sm">SM</option><option value="md">MD</option><option value="lg">LG</option><option value="xl">XL</option><option value="2xl">2XL</option>
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[10px] text-slate-400">Dim. Body</label>
+                                                            <select value={generatedContent.typography?.bodySize} onChange={(e) => updateTypography('bodySize', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded p-1 text-xs text-white">
+                                                                <option value="sm">Small</option><option value="md">Medium</option><option value="lg">Large</option>
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                    <div className="mt-3 pt-2 border-t border-slate-800">
+                                                         <label className="text-[10px] font-medium text-slate-400 mb-1 block">Dimensione Testo in PX (Opzionale, sovrascrive sopra)</label>
+                                                         <div className="grid grid-cols-3 gap-2">
+                                                             <input type="text" placeholder="H1" value={generatedContent.customTypography?.h1 || ''} onChange={e => updateCustomTypography('h1', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded p-1 text-xs text-white"/>
+                                                             <input type="text" placeholder="H2" value={generatedContent.customTypography?.h2 || ''} onChange={e => updateCustomTypography('h2', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded p-1 text-xs text-white"/>
+                                                             <input type="text" placeholder="H3/Feature" value={generatedContent.customTypography?.h3 || ''} onChange={e => updateCustomTypography('h3', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded p-1 text-xs text-white"/>
+                                                             <input type="text" placeholder="Body" value={generatedContent.customTypography?.body || ''} onChange={e => updateCustomTypography('body', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded p-1 text-xs text-white"/>
+                                                             <input type="text" placeholder="Small" value={generatedContent.customTypography?.small || ''} onChange={e => updateCustomTypography('small', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded p-1 text-xs text-white"/>
+                                                             <input type="text" placeholder="CTA" value={generatedContent.customTypography?.cta || ''} onChange={e => updateCustomTypography('cta', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded p-1 text-xs text-white"/>
+                                                         </div>
+                                                    </div>
+                                                </div>
+                                                <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700">
+                                                    <label className="text-xs font-bold text-slate-300 mb-2 block">Colori</label>
+                                                    <div className="space-y-3">
+                                                         <div>
+                                                            <label className="text-[10px] text-slate-400 mb-1 block">Colore Sfondo Pagina</label>
+                                                            <div className="flex items-center gap-2">
+                                                                 <input type="color" value={generatedContent.backgroundColor || '#f8fafc'} onChange={(e) => updateContentField('backgroundColor', e.target.value)} className="w-8 h-8 rounded border-none bg-transparent" />
+                                                                 <input type="text" value={generatedContent.backgroundColor || ''} onChange={(e) => updateContentField('backgroundColor', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded p-1 text-xs text-white" placeholder="#f8fafc"/>
+                                                            </div>
+                                                         </div>
+                                                        <div>
+                                                            <label className="text-[10px] text-slate-400 mb-1 block">Colore Pulsante CTA</label>
+                                                            <div className="grid grid-cols-4 gap-1">
+                                                                {BUTTON_GRADIENTS.map(g => (
+                                                                    <button key={g.label} onClick={() => updateContentField('buttonColor', g.class)} className={`h-8 rounded text-[9px] font-bold border-2 ${g.class} ${generatedContent.buttonColor === g.class ? 'border-emerald-400' : 'border-transparent'}`}>{g.label}</button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                             <div>
+                                                                <label className="text-[10px] text-slate-400">Colore Prezzo</label>
+                                                                <input type="text" value={generatedContent.priceStyles?.color || ''} onChange={e => updatePriceStyles('color', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded p-1 text-xs text-white" placeholder="es. #ff0000"/>
+                                                            </div>
+                                                            <div>
+                                                                <label className="text-[10px] text-slate-400">Dimensione Prezzo (px)</label>
+                                                                <input type="text" value={generatedContent.priceStyles?.fontSize || ''} onChange={e => updatePriceStyles('fontSize', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded p-1 text-xs text-white" placeholder="es. 48"/>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {/* 8. Script & Avanzate */}
+                                        <div className="border-t border-slate-700 pt-4">
+                                            <label className="block text-xs font-bold text-emerald-400 uppercase tracking-wide mb-2">8. Script & Avanzate</label>
+                                            <div className="space-y-3">
+                                                <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700">
+                                                     <label className="text-xs font-bold text-slate-300 mb-2 block">Pixel & Script (HTML)</label>
+                                                     <div className="grid grid-cols-2 gap-2">
+                                                         <div><label className="text-[10px] text-slate-400">Meta - Landing Page</label><textarea value={generatedContent.metaLandingHtml || ''} onChange={(e) => updateContentField('metaLandingHtml', e.target.value)} className="w-full h-20 bg-slate-800 border border-slate-600 rounded p-1 text-[10px] text-white font-mono"/></div>
+                                                         <div><label className="text-[10px] text-slate-400">Meta - Thank You Page</label><textarea value={generatedContent.metaThankYouHtml || ''} onChange={(e) => updateContentField('metaThankYouHtml', e.target.value)} className="w-full h-20 bg-slate-800 border border-slate-600 rounded p-1 text-[10px] text-white font-mono"/></div>
+                                                         <div><label className="text-[10px] text-slate-400">TikTok - Landing Page</label><textarea value={generatedContent.tiktokLandingHtml || ''} onChange={(e) => updateContentField('tiktokLandingHtml', e.target.value)} className="w-full h-20 bg-slate-800 border border-slate-600 rounded p-1 text-[10px] text-white font-mono"/></div>
+                                                         <div><label className="text-[10px] text-slate-400">TikTok - Thank You Page</label><textarea value={generatedContent.tiktokThankYouHtml || ''} onChange={(e) => updateContentField('tiktokThankYouHtml', e.target.value)} className="w-full h-20 bg-slate-800 border border-slate-600 rounded p-1 text-[10px] text-white font-mono"/></div>
+                                                     </div>
+                                                     <div className="mt-2">
+                                                         <label className="text-[10px] text-slate-400">Extra HTML (Body - Landing)</label>
+                                                         <textarea value={generatedContent.extraLandingHtml || ''} onChange={(e) => updateContentField('extraLandingHtml', e.target.value)} className="w-full h-20 bg-slate-800 border border-slate-600 rounded p-1 text-[10px] text-white font-mono"/>
+                                                     </div>
+                                                     <div className="mt-2">
+                                                         <label className="text-[10px] text-slate-400">Extra HTML (Body - Thank You)</label>
+                                                         <textarea value={generatedContent.extraThankYouHtml || ''} onChange={(e) => updateContentField('extraThankYouHtml', e.target.value)} className="w-full h-20 bg-slate-800 border border-slate-600 rounded p-1 text-[10px] text-white font-mono"/>
+                                                     </div>
+                                                </div>
+                                                <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700">
+                                                     <label className="text-xs font-bold text-slate-300 mb-2 block">Thank You Page</label>
+                                                     <div><label className="text-[10px] text-slate-400">URL Redirect (Opzionale, sovrascrive pagina di grazie)</label><input type="text" value={generatedContent.customThankYouUrl || ''} onChange={(e) => updateContentField('customThankYouUrl', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded p-1 text-xs text-white" placeholder="https://..."/></div>
+                                                     <div className="grid grid-cols-2 gap-2 mt-2">
+                                                        <div><label className="text-[10px] text-slate-400">Titolo (Usa {'{name}'})</label><input type="text" value={generatedContent.customThankYouTitle || ''} onChange={(e) => updateContentField('customThankYouTitle', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded p-1 text-xs text-white"/></div>
+                                                        <div><label className="text-[10px] text-slate-400">Messaggio (Usa {'{phone}'})</label><input type="text" value={generatedContent.customThankYouMessage || ''} onChange={(e) => updateContentField('customThankYouMessage', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded p-1 text-xs text-white"/></div>
+                                                     </div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -976,6 +1131,4 @@ const App: React.FC = () => {
     </div>
   );
 };
-
-// FIX: Export the App component as a default export to make it available for import in index.tsx.
 export default App;
