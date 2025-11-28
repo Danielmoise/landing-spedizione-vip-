@@ -611,7 +611,7 @@ const App: React.FC = () => {
         };
 
         if (isSupabaseConfigured() && supabase && session.id !== 'admin-local') {
-            let error;
+            let error: any;
             if (editingPageId) { 
                 const { error: updateError } = await supabase.from('landing_pages').update(dbPayload).eq('id', editingPageId); 
                 error = updateError;
@@ -619,11 +619,17 @@ const App: React.FC = () => {
                 const { error: insertError } = await supabase.from('landing_pages').insert(dbPayload); 
                 error = insertError; 
             }
-            if (error) { console.error("Supabase save error:", error); alert("Errore salvataggio database: " + error.message); } 
-            else { 
-                alert(editingPageId ? "Pagina aggiornata con successo!" : "Pagina pubblicata con successo!"); 
-                await fetchPublicPages(); 
-                handleCloseEditor(); 
+            if (error) {
+                console.error("Supabase save error:", error);
+                if (error.message.includes('thank_you_content') && error.code === 'PGRST204') {
+                    alert("Errore Database: La colonna 'thank_you_content' non esiste. Esegui il comando SQL per aggiungerla:\n\nALTER TABLE public.landing_pages\nADD COLUMN thank_you_content jsonb;");
+                } else {
+                    alert("Errore salvataggio database: " + error.message);
+                }
+            } else {
+                alert(editingPageId ? "Pagina aggiornata con successo!" : "Pagina pubblicata con successo!");
+                await fetchPublicPages();
+                handleCloseEditor();
             }
         } else {
             // MOCK MODE

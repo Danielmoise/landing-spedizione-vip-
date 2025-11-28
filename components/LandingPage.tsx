@@ -488,9 +488,12 @@ const OrderPopup: React.FC<{ isOpen: boolean; onClose: () => void; content: Gene
     };
 
     const parsePrice = (val?: string | number) => {
-        if(!val) return 0;
-        const str = String(val);
-        return parseFloat(str.replace(',', '.'));
+        if (val === undefined || val === null) return 0;
+        const str = String(val)
+            .replace(/[^\d,.]/g, '') // Rimuove tutto tranne numeri, virgole e punti
+            .replace(',', '.');       // Sostituisce la virgola con il punto
+        const num = parseFloat(str);
+        return isNaN(num) ? 0 : num;
     }
 
     const calculateTotal = () => {
@@ -702,6 +705,11 @@ export const ThankYouPage: React.FC<{ content: GeneratedContent; initialData?: O
     // The component now uses its own headline and subheadline for content.
     const titleTemplate = content.headline || labels.thankYouTitle;
     const msgTemplate = content.subheadline || labels.thankYouMsg;
+
+    // Fix: Replace all variables in both strings
+    const finalTitle = titleTemplate.replace('{name}', name).replace('{phone}', phone);
+    const finalMsg = msgTemplate.replace('{name}', name).replace('{phone}', phone);
+    
     const backgroundStyle = content.backgroundColor ? { backgroundColor: content.backgroundColor } : {};
     const heroImage = content.heroImageBase64 || (content.generatedImages && content.generatedImages.length > 0 ? content.generatedImages[0] : null);
 
@@ -719,7 +727,7 @@ export const ThankYouPage: React.FC<{ content: GeneratedContent; initialData?: O
                 <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 animate-in zoom-in duration-500 shadow-sm ring-4 ring-green-50">
                     <CheckCircle className="w-12 h-12 text-green-600" />
                 </div>
-                <h3 className="text-3xl font-black text-slate-900 mb-4 leading-tight">{titleTemplate.replace('{name}', name)}</h3>
+                <h3 className="text-3xl font-black text-slate-900 mb-4 leading-tight">{finalTitle}</h3>
                  {heroImage && (
                     <div className="my-6 rounded-xl overflow-hidden shadow-md border border-slate-100">
                         <img src={heroImage} alt="Thank You" className="w-full h-auto object-cover" />
@@ -727,7 +735,7 @@ export const ThankYouPage: React.FC<{ content: GeneratedContent; initialData?: O
                 )}
                 <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 mb-8 relative">
                         <div className="absolute -top-3 -right-3 bg-blue-500 text-white p-1.5 rounded-full shadow-md"><Phone className="w-4 h-4" /></div>
-                        <p className="text-slate-600 leading-relaxed font-medium text-lg">{msgTemplate.replace('{phone}', phone)}</p>
+                        <p className="text-slate-600 leading-relaxed font-medium text-lg">{finalMsg}</p>
                 </div>
                 <button onClick={() => window.location.href = '/'} className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 px-8 rounded-xl shadow-lg transition flex items-center justify-center gap-2">
                     <ShoppingBag className="w-5 h-5"/> {labels.backToShop}
