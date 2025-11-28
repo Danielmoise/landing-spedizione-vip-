@@ -680,7 +680,7 @@ const App: React.FC = () => {
         <div className="relative">
             <div className="fixed top-3 left-3 z-[100] md:left-3 left-auto right-3 md:right-auto"><button onClick={() => { setView('home'); window.history.pushState({}, '', window.location.pathname); }} className="hidden md:flex bg-white/80 backdrop-blur-md text-slate-800 p-2 md:px-4 md:py-2 rounded-full shadow-sm border border-slate-200/50 hover:bg-white hover:shadow-md transition-all items-center gap-2 group" title="Torna allo Shop"><ChevronLeft className="w-5 h-5 group-hover:-translate-x-0.5 transition-transform" /> <span className="hidden md:inline font-bold text-sm">Torna allo Shop</span></button></div>
             {session && (<div className="fixed top-3 right-3 z-[100]"><button onClick={() => setView('admin')} className="bg-emerald-600/90 backdrop-blur text-white p-2 md:px-4 md:py-2 rounded-full shadow-lg hover:bg-emerald-600 transition flex items-center gap-2 font-bold" title="Dashboard Admin"><LayoutDashboard className="w-5 h-5" /> <span className="hidden md:inline">Dashboard Admin</span></button></div>)}
-            <LandingPage content={contentWithScripts} thankYouSlug={selectedPublicPage.thank_you_slug} onRedirect={(data) => { setOrderData(data); setView('thank_you_view'); window.scrollTo(0,0); try { const nextUrl = new URL(window.location.href); nextUrl.search = ''; if (selectedPublicPage.thank_you_slug) nextUrl.searchParams.set('s', selectedPublicPage.thank_you_slug.replace(/^\//, '')); window.history.pushState({}, '', nextUrl.toString()); } catch (e) { console.warn("Navigation/Redirect failed (benign in preview):", e); } }} />
+            <LandingPage content={contentWithScripts} thankYouSlug={selectedPublicPage.thank_you_slug} onRedirect={(data) => { setOrderData(data); setView('thank_you_view'); window.scrollTo(0,0); }} />
         </div>
       );
   }
@@ -761,7 +761,28 @@ const App: React.FC = () => {
                                     <div className="space-y-8">
                                         <div className="border-b border-slate-700 pb-4">
                                             <div className="flex items-center gap-2 mb-3"><LinkIcon className="w-4 h-4 text-emerald-400" /><label className="block text-xs font-bold text-emerald-400 uppercase tracking-wide">URL & Link</label></div>
-                                            <div className="space-y-3"><div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700"><label className="block text-[10px] font-medium text-slate-400 mb-1">Landing Page Slug</label><div className="flex items-center"><span className="text-xs text-slate-500 bg-slate-800 px-2 py-2 rounded-l border-y border-l border-slate-700">/s/</span><input type="text" value={slug} onChange={(e) => setSlug(formatSlug(e.target.value))} className="w-full bg-slate-900 border border-slate-700 rounded-r p-2 text-sm text-white focus:border-emerald-500 outline-none font-mono" placeholder="nome-prodotto"/></div></div></div>
+                                            <div className="space-y-3">
+                                                <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700">
+                                                    <label className="block text-[10px] font-medium text-slate-400 mb-1">Landing Page Slug</label>
+                                                    <div className="flex items-center">
+                                                        <span className="text-xs text-slate-500 bg-slate-800 px-2 py-2 rounded-l border-y border-l border-slate-700">/s/</span>
+                                                        <input type="text" value={slug} onChange={(e) => setSlug(formatSlug(e.target.value))} className="w-full bg-slate-900 border border-slate-700 rounded-r p-2 text-sm text-white focus:border-emerald-500 outline-none font-mono" placeholder="nome-prodotto"/>
+                                                    </div>
+                                                </div>
+                                                <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700">
+                                                    <label className="block text-[10px] font-medium text-slate-400 mb-1">Thank You Page Slug (Redirect Normale)</label>
+                                                    <div className="flex items-center">
+                                                        <span className="text-xs text-slate-500 bg-slate-800 px-2 py-2 rounded-l border-y border-l border-slate-700">/s/</span>
+                                                        <input
+                                                            type="text"
+                                                            value={tySlug}
+                                                            onChange={(e) => setTySlug(formatSlug(e.target.value))}
+                                                            className="w-full bg-slate-900 border border-slate-700 rounded-r p-2 text-sm text-white focus:border-emerald-500 outline-none font-mono"
+                                                            placeholder="nome-prodotto-grazie"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                         {/* Design */}
                                         <div><label className="block text-xs font-bold text-emerald-400 uppercase tracking-wide mb-2">1. Design</label><div className="grid grid-cols-3 gap-2 mb-4">{TEMPLATES.map((t) => (<div key={t.id} onClick={() => setSelectedTemplate(t.id)} className={`cursor-pointer p-1.5 rounded border-2 transition-all text-center ${selectedTemplate === t.id ? 'border-emerald-500 bg-slate-700' : 'border-slate-700 hover:bg-slate-750'}`}><p className="text-[9px] font-bold text-white truncate">{t.name}</p></div>))}</div></div>
@@ -1130,7 +1151,7 @@ const App: React.FC = () => {
                                                      </div>
                                                 <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700">
                                                      <label className="text-xs font-bold text-slate-300 mb-2 block">Redirect Avanzato</label>
-                                                     <div><label className="text-[10px] text-slate-400">URL Redirect (Opzionale, sovrascrive pagina di grazie)</label><input type="text" value={generatedContent.customThankYouUrl || ''} onChange={(e) => updateContentField('customThankYouUrl', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded p-1 text-xs text-white" placeholder="https://..."/></div>
+                                                     <div><label className="text-[10px] text-slate-400">URL Redirect Esterno (Opzionale, sovrascrive redirect normale)</label><input type="text" value={generatedContent.customThankYouUrl || ''} onChange={(e) => updateContentField('customThankYouUrl', e.target.value)} className="w-full bg-slate-800 border border-slate-600 rounded p-1 text-xs text-white" placeholder="https://..."/></div>
                                                 </div>
                                             </div>
                                         </div>

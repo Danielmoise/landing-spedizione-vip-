@@ -545,12 +545,25 @@ const OrderPopup: React.FC<{ isOpen: boolean; onClose: () => void; content: Gene
                 window.location.href = targetUrl;
                 return;
             }
+
+            // PREVIEW MODE: Use onRedirect for SPA-like navigation.
             if (onRedirect) {
                 onRedirect({ name: formData.name, phone: formData.phone, price: totalPrice });
                 onClose();
                 return;
             }
-            // Fallback if no redirect handler
+
+            // LIVE MODE (no onRedirect passed): Perform a full page navigation.
+            if (thankYouSlug) {
+                const url = new URL(window.location.origin + window.location.pathname);
+                url.searchParams.set('s', thankYouSlug.replace(/^\//, ''));
+                url.searchParams.set('name', formData.name || '');
+                url.searchParams.set('phone', formData.phone || '');
+                window.location.href = url.toString();
+                return;
+            }
+            
+            // Fallback if no redirect is possible
             onClose();
         } catch (navError) {
             console.warn("Navigation/Redirect failed:", navError);
