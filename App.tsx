@@ -282,34 +282,53 @@ const App: React.FC = () => {
         setPublicPages([{ id: '1', created_at: new Date().toISOString(), product_name: 'CryptoBot 3000', niche: 'Finanza', is_published: true, slug: 'cryptobot-3000', thank_you_slug: 'cryptobot-3000-grazie', content: { templateId: 'classic', language: 'Italiano', headline: "Sblocca i tuoi guadagni", subheadline: "Il bot di trading automatico n.1", heroImagePrompt: "trading", benefits: ["Sicuro", "Veloce"], features: [], testimonial: { name: "Test", role: "User", text: "Wow" }, testimonials: [{ name: "Test", role: "User", text: "Wow" }], ctaText: "Compra Ora", ctaSubtext: "Garanzia", colorScheme: "blue", niche: "Finanza", price: "49.00", currency: "€", originalPrice: "99.00", showDiscount: true, announcementBarText: "SPEDIZIONE GRATUITA + PAGAMENTO ALLA CONSEGNA", formConfiguration: DEFAULT_FORM_CONFIG, showSocialProofBadge: true, socialProofConfig: { enabled: true, intervalSeconds: 10, maxShows: 4 }, shippingCost: "0", enableShippingCost: false } }]);
     }
     const handleRouting = async () => {
-         const params = new URLSearchParams(window.location.search);
-         const pageId = params.get('p');
-         const pageSlug = params.get('s');
-         if (pageId || pageSlug) {
-             setIsLoadingPages(true);
-             if (isSupabaseConfigured() && supabase) {
-                 let query = supabase.from('landing_pages').select('*');
-                 const { data: allPages, error } = await query;
-                 if (!error && allPages) {
-                     let matchedPage = allPages.find(p => p.id === pageId || p.slug === pageSlug);
-                     if (matchedPage) {
-                         const contentWithScripts = { ...matchedPage.content, customHeadHtml: matchedPage.custom_head_html || matchedPage.content.customHeadHtml, customThankYouHtml: matchedPage.custom_thankyou_html || matchedPage.content.customThankYouHtml };
-                         setSelectedPublicPage(contentWithScripts); setCurrentThankYouSlug(matchedPage.thank_you_slug); setView('product_view');
-                     } else {
-                         let tyPage = allPages.find(p => p.thank_you_slug === pageSlug);
-                         if (!tyPage && pageSlug) {
-                             const suffixes = Object.values(TY_SUFFIXES);
-                             for (const suffix of suffixes) { if (pageSlug.endsWith(suffix)) { const originalSlug = pageSlug.slice(0, -suffix.length); tyPage = allPages.find(p => p.slug === originalSlug); if (tyPage) break; } }
-                         }
-                         if (tyPage) {
-                             const contentWithScripts = { ...tyPage.content, customHeadHtml: tyPage.custom_head_html || tyPage.content.customHeadHtml, customThankYouHtml: tyPage.custom_thankyou_html || tyPage.content.customThankYouHtml };
-                             setSelectedPublicPage(contentWithScripts); setView('thank_you_view');
-                         } else { setView('home'); window.history.replaceState({}, '', window.location.pathname); }
-                     }
-                 } else { setView('home'); }
-             } else { setView('home'); }
-             setIsLoadingPages(false);
-         } else { if (!window.location.search.includes('p=') && !window.location.search.includes('s=') && !session) { setView('home'); setSelectedPublicPage(null); } }
+        const params = new URLSearchParams(window.location.search);
+        const pageId = params.get('p');
+        const pageSlug = params.get('s');
+        
+        if (pageId || pageSlug) {
+            setIsLoadingPages(true);
+            if (isSupabaseConfigured() && supabase) {
+                let query;
+                if (pageSlug) {
+                    query = supabase.from('landing_pages').select('*').or(`slug.eq.${pageSlug},thank_you_slug.eq.${pageSlug}`).maybeSingle();
+                } else if (pageId) {
+                    query = supabase.from('landing_pages').select('*').eq('id', pageId).maybeSingle();
+                } else {
+                    setIsLoadingPages(false);
+                    return;
+                }
+
+                const { data: matchedPage, error } = await query;
+                
+                if (!error && matchedPage) {
+                    const contentWithScripts = { 
+                        ...matchedPage.content, 
+                        customHeadHtml: matchedPage.custom_head_html || matchedPage.content.customHeadHtml, 
+                        customThankYouHtml: matchedPage.custom_thankyou_html || matchedPage.content.customThankYouHtml 
+                    };
+
+                    if (matchedPage.slug === pageSlug || matchedPage.id === pageId) {
+                        setSelectedPublicPage(contentWithScripts);
+                        setCurrentThankYouSlug(matchedPage.thank_you_slug);
+                        setView('product_view');
+                    } else { // Matched thank_you_slug
+                        setSelectedPublicPage(contentWithScripts);
+                        setView('thank_you_view');
+                    }
+                } else {
+                    if (error) console.error("Error fetching page:", error.message);
+                    setView('home');
+                    window.history.replaceState({}, '', window.location.pathname);
+                }
+            } else {
+                setView('home'); // Mock mode
+            }
+            setIsLoadingPages(false);
+        } else if (!window.location.search.includes('p=') && !window.location.search.includes('s=') && !session) {
+            setView('home');
+            setSelectedPublicPage(null);
+        }
     };
     window.addEventListener('popstate', handleRouting);
     handleRouting();

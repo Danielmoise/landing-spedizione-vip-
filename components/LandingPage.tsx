@@ -504,56 +504,54 @@ const OrderPopup: React.FC<{ isOpen: boolean; onClose: () => void; content: Gene
         return total.toFixed(2);
     };
 
-    const finalizeOrder = async (method: 'cod' | 'card') => {
+    const finalizeOrder = (method: 'cod' | 'card') => {
         setIsLoading(true);
+        
+        const totalPrice = calculateTotal();
+        const payloadData: Record<string, any> = {
+            event_type: 'new_order',
+            product_name: content.headline || 'Unknown Product',
+            price: `${price} ${currency}`,
+            shipping_cost: content.enableShippingCost ? `${content.shippingCost} ${currency}` : `0 ${currency}`,
+            total_price: `${totalPrice} ${currency}`,
+            payment_method: method,
+            customer_ip: clientIp,
+            timestamp: new Date().toISOString(),
+            shipping_insurance_selected: isInsuranceChecked ? 'yes' : 'no',
+            shipping_insurance_cost: (isInsuranceChecked && content.insuranceConfig?.enabled) ? `${content.insuranceConfig.cost} ${currency}` : '0',
+            ...formData
+        };
+        const urlParams = new URLSearchParams();
+        Object.entries(payloadData).forEach(([key, value]) => urlParams.append(key, String(value)));
+
+        if (content.webhookUrl && content.webhookUrl.trim() !== '') {
+            // Fire-and-forget the webhook call, don't await it
+            fetch(content.webhookUrl, { method: 'POST', body: urlParams, mode: 'no-cors' })
+                .catch(err => console.error("Webhook send error (non-blocking):", err));
+        }
+
+        trackEvent('Lead', { content_id: contentId }, { email: formData.email, phone: formData.phone });
+        trackEvent('Contact', {}, { email: formData.email, phone: formData.phone });
+        
         try {
-            const totalPrice = calculateTotal();
-            const payloadData: Record<string, any> = {
-                event_type: 'new_order',
-                product_name: content.headline || 'Unknown Product',
-                price: `${price} ${currency}`,
-                shipping_cost: content.enableShippingCost ? `${content.shippingCost} ${currency}` : `0 ${currency}`,
-                total_price: `${totalPrice} ${currency}`,
-                payment_method: method,
-                customer_ip: clientIp,
-                timestamp: new Date().toISOString(),
-                shipping_insurance_selected: isInsuranceChecked ? 'yes' : 'no',
-                shipping_insurance_cost: (isInsuranceChecked && content.insuranceConfig?.enabled) ? `${content.insuranceConfig.cost} ${currency}` : '0',
-                ...formData
-            };
-            const urlParams = new URLSearchParams();
-            Object.entries(payloadData).forEach(([key, value]) => urlParams.append(key, String(value)));
-
-            if (content.webhookUrl && content.webhookUrl.trim() !== '') {
-                try {
-                    await fetch(content.webhookUrl, { method: 'POST', body: urlParams, mode: 'no-cors' });
-                } catch (err) { console.error("Webhook error:", err); }
+            if (content.customThankYouUrl && content.customThankYouUrl.trim() !== '') {
+                let targetUrl = content.customThankYouUrl.trim();
+                if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://') && !targetUrl.startsWith('/')) {
+                    targetUrl = 'https://' + targetUrl;
+                }
+                window.location.href = targetUrl;
+                return;
             }
-            trackEvent('Lead', { content_id: contentId }, { email: formData.email, phone: formData.phone });
-            trackEvent('Contact', {}, { email: formData.email, phone: formData.phone });
-            
-            try {
-                 if (content.customThankYouUrl && content.customThankYouUrl.trim() !== '') {
-                     let targetUrl = content.customThankYouUrl.trim();
-                     if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://') && !targetUrl.startsWith('/')) {
-                         targetUrl = 'https://' + targetUrl;
-                     }
-                     window.location.href = targetUrl;
-                     return;
-                }
-                if (onRedirect) {
-                    onRedirect({ name: formData.name, phone: formData.phone, price: totalPrice });
-                    onClose();
-                    return;
-                }
+            if (onRedirect) {
+                onRedirect({ name: formData.name, phone: formData.phone, price: totalPrice });
                 onClose();
-
-            } catch (navError) { console.warn("Navigation/Redirect failed:", navError); }
-        } catch (error: any) {
-            console.error("Order processing error:", error);
+                return;
+            }
+            // Fallback if no redirect handler
+            onClose();
+        } catch (navError) {
+            console.warn("Navigation/Redirect failed:", navError);
             setIsLoading(false);
-            if (error?.message === 'Script error.' || error?.message.includes('pushState')) { onClose(); return; }
-            alert(`Error processing order: ${error?.message || ''}. Please try again.`);
         }
     };
 
